@@ -766,3 +766,235 @@ describe("Authentication functionality", () => {
     expect(testImporter.loadSavedTokens).toHaveBeenCalled();
   });
 });
+
+describe("Sequence number handling", () => {
+  let importer;
+
+  beforeEach(() => {
+    importer = new CalendarImporter();
+    // Mock the calendar API
+    importer.calendar = {
+      events: {
+        get: jest.fn(),
+        update: jest.fn(),
+      },
+    };
+  });
+
+  test("should handle sequence number conflicts with retry", async () => {
+    const calendarId = "primary";
+    const eventId = "test-event-id";
+    const eventResource = { summary: "Test Event" };
+
+    // Mock the get response
+    importer.calendar.events.get.mockResolvedValue({
+      data: { sequence: 1 },
+    });
+
+    // Mock the first update to fail with sequence error, second to succeed
+    importer.calendar.events.update
+      .mockRejectedValueOnce(new Error("Invalid sequence value"))
+      .mockResolvedValueOnce({ data: { id: eventId } });
+
+    const result = await importer.updateEventWithRetry(calendarId, eventId, eventResource);
+
+    expect(importer.calendar.events.get).toHaveBeenCalledTimes(2);
+    expect(importer.calendar.events.update).toHaveBeenCalledTimes(2);
+    expect(result.data.id).toBe(eventId);
+  });
+
+  test("should increment sequence number correctly", async () => {
+    const calendarId = "primary";
+    const eventId = "test-event-id";
+    const eventResource = { summary: "Test Event" };
+
+    // Mock the get response with sequence 5
+    importer.calendar.events.get.mockResolvedValue({
+      data: { sequence: 5 },
+    });
+
+    // Mock successful update
+    importer.calendar.events.update.mockResolvedValue({
+      data: { id: eventId },
+    });
+
+    await importer.updateEventWithRetry(calendarId, eventId, eventResource);
+
+    // Check that the update was called with incremented sequence
+    expect(importer.calendar.events.update).toHaveBeenCalledWith({
+      calendarId: calendarId,
+      eventId: eventId,
+      supportsAttendees: true,
+      resource: {
+        ...eventResource,
+        sequence: 6, // 5 + 1
+      },
+    });
+  });
+
+  test("should handle missing sequence number", async () => {
+    const calendarId = "primary";
+    const eventId = "test-event-id";
+    const eventResource = { summary: "Test Event" };
+
+    // Mock the get response without sequence
+    importer.calendar.events.get.mockResolvedValue({
+      data: {},
+    });
+
+    // Mock successful update
+    importer.calendar.events.update.mockResolvedValue({
+      data: { id: eventId },
+    });
+
+    await importer.updateEventWithRetry(calendarId, eventId, eventResource);
+
+    // Check that the update was called with sequence 1 (0 + 1)
+    expect(importer.calendar.events.update).toHaveBeenCalledWith({
+      calendarId: calendarId,
+      eventId: eventId,
+      supportsAttendees: true,
+      resource: {
+        ...eventResource,
+        sequence: 1,
+      },
+    });
+  });
+
+  test("should throw error after max retries", async () => {
+    const calendarId = "primary";
+    const eventId = "test-event-id";
+    const eventResource = { summary: "Test Event" };
+
+    // Mock the get response
+    importer.calendar.events.get.mockResolvedValue({
+      data: { sequence: 1 },
+    });
+
+    // Mock all updates to fail with sequence error
+    importer.calendar.events.update.mockRejectedValue(new Error("Invalid sequence value"));
+
+    await expect(
+      importer.updateEventWithRetry(calendarId, eventId, eventResource, 2),
+    ).rejects.toThrow("Invalid sequence value");
+
+    expect(importer.calendar.events.update).toHaveBeenCalledTimes(2);
+  });
+
+  test("should throw non-sequence errors immediately", async () => {
+    const calendarId = "primary";
+    const eventId = "test-event-id";
+    const eventResource = { summary: "Test Event" };
+
+    // Mock the get response
+    importer.calendar.events.get.mockResolvedValue({
+      data: { sequence: 1 },
+    });
+
+    // Mock update to fail with different error
+    importer.calendar.events.update.mockRejectedValue(new Error("Some other error"));
+
+    await expect(importer.updateEventWithRetry(calendarId, eventId, eventResource)).rejects.toThrow(
+      "Some other error",
+    );
+
+    expect(importer.calendar.events.update).toHaveBeenCalledTimes(1);
+  });
+
+  test("should always throw an error when all retries fail", async () => {
+    const calendarId = "primary";
+    const eventId = "test-event-id";
+    const eventResource = { summary: "Test Event" };
+
+    // Mock the get response to succeed
+    importer.calendar.events.get.mockResolvedValue({
+      data: { sequence: 1 },
+    });
+
+    // Mock update to always fail with sequence error
+    importer.calendar.events.update.mockRejectedValue(new Error("Invalid sequence value"));
+
+    // This should throw the last error, not return undefined
+    await expect(
+      importer.updateEventWithRetry(calendarId, eventId, eventResource, 1),
+    ).rejects.toThrow("Invalid sequence value");
+
+    expect(importer.calendar.events.update).toHaveBeenCalledTimes(1);
+    expect(importer.calendar.events.get).toHaveBeenCalledTimes(1);
+  });
+
+  test("should not exit process when sequence errors are encountered", async () => {
+    const calendarId = "primary";
+    const eventId = "test-event-id";
+    const eventResource = { summary: "Test Event" };
+
+    // Mock the get response to succeed
+    importer.calendar.events.get.mockResolvedValue({
+      data: { sequence: 1 },
+    });
+
+    // Mock update to always fail with sequence error
+    importer.calendar.events.update.mockRejectedValue(new Error("Invalid sequence value"));
+
+    // Mock process.exit to track if it gets called
+    const originalExit = process.exit;
+    const mockExit = jest.fn();
+    process.exit = mockExit;
+
+    try {
+      // This should throw an error but not call process.exit
+      await expect(
+        importer.updateEventWithRetry(calendarId, eventId, eventResource, 1),
+      ).rejects.toThrow("Invalid sequence value");
+
+      // Verify process.exit was never called during retry logic
+      expect(mockExit).not.toHaveBeenCalled();
+    } finally {
+      // Restore original process.exit
+      process.exit = originalExit;
+    }
+  });
+});
+
+describe("Sequence error detection", () => {
+  let importer;
+
+  beforeEach(() => {
+    importer = new CalendarImporter();
+  });
+
+  test("should detect sequence errors correctly", () => {
+    const sequenceErrors = [
+      new Error("Invalid sequence value"),
+      { message: "conflict", response: { status: 409 } },
+      { message: "error", code: 409 },
+    ];
+
+    sequenceErrors.forEach((error) => {
+      expect(importer.isSequenceError(error)).toBe(true);
+    });
+  });
+
+  test("should not detect non-sequence errors as sequence errors", () => {
+    const nonSequenceErrors = [
+      new Error("Bad Request"),
+      new Error("Forbidden"),
+      new Error("Not found"),
+      { message: "some other error", response: { status: 400 } },
+      { message: "error", code: 500 },
+    ];
+
+    nonSequenceErrors.forEach((error) => {
+      expect(importer.isSequenceError(error)).toBe(false);
+    });
+  });
+
+  test("should handle malformed error objects", () => {
+    const malformedErrors = [{}, { message: null }, { response: {} }, null, undefined];
+
+    malformedErrors.forEach((error) => {
+      expect(() => importer.isSequenceError(error)).not.toThrow();
+      expect(importer.isSequenceError(error)).toBe(false);
+    });
+  });
+});

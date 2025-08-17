@@ -509,6 +509,83 @@ class CalendarImporter {
     }
   }
 
+  isSequenceError(error) {
+    if (!error) return false;
+
+    const errorMessage = error.message || "";
+    const errorCode = error.code || "";
+    const statusCode = error.response?.status || "";
+
+    return (
+      errorMessage.includes("Invalid sequence value") || statusCode === 409 || errorCode === 409
+    );
+  }
+
+  async updateEventWithRetry(calendarId, eventId, eventResource, maxRetries = 3) {
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`🔄 Update attempt ${attempt}/${maxRetries} for event ${eventId}`);
+
+        // Fetch the current event to get the latest sequence number
+        const currentEvent = await this.calendar.events.get({
+          calendarId: calendarId,
+          eventId: eventId,
+        });
+
+        // Use the current sequence number (or increment it)
+        const currentSequence = currentEvent.data.sequence || 0;
+        const newSequence = currentSequence + 1;
+        console.log(`📊 Current sequence: ${currentSequence}, using: ${newSequence}`);
+
+        const updatedResource = {
+          ...eventResource,
+          sequence: newSequence,
+        };
+
+        const response = await this.calendar.events.update({
+          calendarId: calendarId,
+          eventId: eventId,
+          supportsAttendees: true,
+          resource: updatedResource,
+        });
+
+        return response;
+      } catch (error) {
+        lastError = error;
+        const errorMessage = error.message || "";
+        const errorCode = error.code || "";
+        const statusCode = error.response?.status || "";
+
+        console.log(`🔍 Error on attempt ${attempt}:`);
+        console.log(`   Message: ${errorMessage}`);
+        console.log(`   Code: ${errorCode}`);
+        console.log(`   Status: ${statusCode}`);
+
+        const isSequenceError = this.isSequenceError(error);
+
+        if (isSequenceError && attempt < maxRetries) {
+          console.log(
+            `⚠️  Sequence/conflict error detected on attempt ${attempt}/${maxRetries}, waiting 2s then retrying...`,
+          );
+          // Wait before retrying to allow any pending operations to complete
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          continue;
+        }
+
+        console.log(
+          `❌ ${isSequenceError ? "Sequence error - no more retries" : "Non-sequence error"} on attempt ${attempt}`,
+        );
+        // If it's not a sequence error or we've exhausted retries, throw the error
+        throw error;
+      }
+    }
+
+    // This should never be reached, but just in case
+    throw lastError || new Error("All retry attempts failed");
+  }
+
   convertICSToGoogleEvent(icsEvent) {
     const recurrenceIdProp = icsEvent.component.getFirstProperty("recurrence-id");
     const isRecurrenceException = !!recurrenceIdProp;
@@ -835,12 +912,7 @@ class CalendarImporter {
 
           // Update ensures recurrence rules are properly processed by Google Calendar
           if (_metadata.hasRecurrence && !_metadata.isRecurrenceException) {
-            response = await this.calendar.events.update({
-              calendarId: calendarId,
-              eventId: response.data.id,
-              supportsAttendees: true,
-              resource: cleanEvent,
-            });
+            response = await this.updateEventWithRetry(calendarId, response.data.id, cleanEvent);
           }
 
           let eventType = "";
@@ -871,7 +943,16 @@ class CalendarImporter {
           const errorMessage = eventError.message || "Unknown error";
           console.error(`❌ Failed to import: ${errorMessage}`);
 
-          if (errorMessage.includes("Bad Request")) {
+          // Check if this is a sequence-related error that already went through retry logic
+          if (this.isSequenceError(eventError)) {
+            console.error("   🔄 This is a sequence/conflict error:");
+            console.error("      - Retry logic was attempted but all attempts failed");
+            console.error(
+              "      - The event may be in rapid flux or there's a persistent conflict",
+            );
+            console.error("      - Skipping this event and continuing with import...");
+            continue; // Skip this event and continue instead of exiting
+          } else if (errorMessage.includes("Bad Request")) {
             console.error("   🔍 This might be due to:");
             console.error("      - Invalid date/time format");
             console.error("      - Missing required fields");
