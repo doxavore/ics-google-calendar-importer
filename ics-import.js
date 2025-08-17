@@ -1084,8 +1084,10 @@ class CalendarImporter {
           const errorMessage = eventError.message || "Unknown error";
           const eventSummary = eventData.summary || "Untitled Event";
           const eventUID = eventData.iCalUID || "Unknown UID";
+          // Calculate original line number (since events are now reversed)
+          const originalLineNumber = events.length - i;
           console.error(
-            `❌ Failed to import event at line ${i + 1} of ${jsonlPath}: ${errorMessage}`,
+            `❌ Failed to import event at line ${originalLineNumber} of ${jsonlPath}: ${errorMessage}`,
           );
           console.error(`   📝 Event: "${eventSummary}" (UID: ${eventUID})`);
 
