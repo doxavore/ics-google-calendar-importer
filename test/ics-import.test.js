@@ -585,6 +585,81 @@ END:VCALENDAR`;
     });
   });
 
+  describe("timezone normalization", () => {
+    test("should map Windows timezone names to IANA identifiers", () => {
+      expect(importer.normalizeTimeZone("Central Standard Time")).toBe("America/Chicago");
+      expect(importer.normalizeTimeZone("Eastern Standard Time")).toBe("America/New_York");
+      expect(importer.normalizeTimeZone("Pacific Standard Time")).toBe("America/Los_Angeles");
+      expect(importer.normalizeTimeZone("Mountain Standard Time")).toBe("America/Denver");
+    });
+
+    test("should handle daylight time variants", () => {
+      expect(importer.normalizeTimeZone("Central Daylight Time")).toBe("America/Chicago");
+      expect(importer.normalizeTimeZone("Eastern Daylight Time")).toBe("America/New_York");
+      expect(importer.normalizeTimeZone("Pacific Daylight Time")).toBe("America/Los_Angeles");
+      expect(importer.normalizeTimeZone("Mountain Daylight Time")).toBe("America/Denver");
+    });
+
+    test("should handle international timezones", () => {
+      expect(importer.normalizeTimeZone("GMT Standard Time")).toBe("Europe/London");
+      expect(importer.normalizeTimeZone("W. Europe Standard Time")).toBe("Europe/Berlin");
+      expect(importer.normalizeTimeZone("Central Europe Standard Time")).toBe("Europe/Prague");
+      expect(importer.normalizeTimeZone("Romance Standard Time")).toBe("Europe/Paris");
+      expect(importer.normalizeTimeZone("China Standard Time")).toBe("Asia/Shanghai");
+      expect(importer.normalizeTimeZone("Tokyo Standard Time")).toBe("Asia/Tokyo");
+      expect(importer.normalizeTimeZone("India Standard Time")).toBe("Asia/Kolkata");
+    });
+
+    test("should pass through valid IANA timezone identifiers", () => {
+      expect(importer.normalizeTimeZone("America/New_York")).toBe("America/New_York");
+      expect(importer.normalizeTimeZone("Europe/London")).toBe("Europe/London");
+      expect(importer.normalizeTimeZone("Asia/Tokyo")).toBe("Asia/Tokyo");
+      expect(importer.normalizeTimeZone("Australia/Sydney")).toBe("Australia/Sydney");
+    });
+
+    test("should handle edge cases", () => {
+      expect(importer.normalizeTimeZone(null)).toBe("UTC");
+      expect(importer.normalizeTimeZone(undefined)).toBe("UTC");
+      expect(importer.normalizeTimeZone("")).toBe("UTC");
+    });
+
+    test("should handle unknown timezone names gracefully", () => {
+      expect(importer.normalizeTimeZone("Unknown Timezone")).toBe("Unknown Timezone");
+      expect(importer.normalizeTimeZone("Custom/Zone")).toBe("Custom/Zone");
+    });
+
+    test("should handle timezone conversion in events", () => {
+      const ICAL = require("ical.js");
+
+      const timezoneIcs = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Test//Test Calendar//EN
+BEGIN:VEVENT
+UID:timezone-event@example.com
+DTSTAMP:20240301T120000Z
+DTSTART;TZID=Central Standard Time:20240315T140000
+DTEND;TZID=Central Standard Time:20240315T150000
+SUMMARY:Timezone Test Event
+END:VEVENT
+END:VCALENDAR`;
+
+      const jcalData = ICAL.parse(timezoneIcs);
+      const comp = new ICAL.Component(jcalData);
+      const vevents = comp.getAllSubcomponents("vevent");
+      const event = new ICAL.Event(vevents[0]);
+
+      // Mock the timezone property
+      event.startDate.timezone = "Central Standard Time";
+      event.endDate.timezone = "Central Standard Time";
+
+      const googleEvent = importer.convertICSToGoogleEvent(event);
+
+      expect(googleEvent).toBeTruthy();
+      expect(googleEvent.start.timeZone).toBe("America/Chicago");
+      expect(googleEvent.end.timeZone).toBe("America/Chicago");
+    });
+  });
+
   describe("RRULE conversion edge cases", () => {
     test("should handle RRULE with UNTIL date", () => {
       const mockRrule = {
@@ -645,5 +720,49 @@ END:VCALENDAR`;
       // Restore working directory
       process.chdir(originalCwd);
     });
+  });
+});
+
+// Add integration tests for the auth command functionality
+describe("Authentication functionality", () => {
+  test("should have authenticateOnly method", () => {
+    const testImporter = new CalendarImporter();
+    expect(typeof testImporter.authenticateOnly).toBe("function");
+  });
+
+  test("should handle missing credentials gracefully", async () => {
+    const testImporter = new CalendarImporter();
+
+    // Mock the loadCredentials method to throw an error
+    const originalLoadCredentials = testImporter.loadCredentials;
+    testImporter.loadCredentials = jest.fn(() => {
+      throw new Error("Credentials file not found");
+    });
+
+    // Mock process.exit to prevent actual exit
+    const originalExit = process.exit;
+    process.exit = jest.fn();
+
+    try {
+      await testImporter.authenticateOnly();
+      expect(process.exit).toHaveBeenCalledWith(1);
+    } finally {
+      // Restore original methods
+      testImporter.loadCredentials = originalLoadCredentials;
+      process.exit = originalExit;
+    }
+  });
+
+  test("should handle existing tokens", async () => {
+    const testImporter = new CalendarImporter();
+
+    // Mock the methods
+    testImporter.loadCredentials = jest.fn();
+    testImporter.loadSavedTokens = jest.fn().mockResolvedValue(true);
+
+    await testImporter.authenticateOnly();
+
+    expect(testImporter.loadCredentials).toHaveBeenCalled();
+    expect(testImporter.loadSavedTokens).toHaveBeenCalled();
   });
 });

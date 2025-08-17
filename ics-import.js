@@ -236,6 +236,66 @@ class CalendarImporter {
     return EMAIL_REGEX.test(email);
   }
 
+  normalizeTimeZone(timezone) {
+    if (!timezone) return "UTC";
+
+    // Common timezone mappings from Windows/Outlook to IANA
+    const timezoneMap = {
+      "Central Standard Time": "America/Chicago",
+      "Eastern Standard Time": "America/New_York",
+      "Mountain Standard Time": "America/Denver",
+      "Pacific Standard Time": "America/Los_Angeles",
+      "Central Daylight Time": "America/Chicago",
+      "Eastern Daylight Time": "America/New_York",
+      "Mountain Daylight Time": "America/Denver",
+      "Pacific Daylight Time": "America/Los_Angeles",
+      "GMT Standard Time": "Europe/London",
+      "W. Europe Standard Time": "Europe/Berlin",
+      "Central Europe Standard Time": "Europe/Prague",
+      "Romance Standard Time": "Europe/Paris",
+      "China Standard Time": "Asia/Shanghai",
+      "Tokyo Standard Time": "Asia/Tokyo",
+      "India Standard Time": "Asia/Kolkata",
+      "Arabic Standard Time": "Asia/Baghdad",
+      "Russian Standard Time": "Europe/Moscow",
+      "SA Pacific Standard Time": "America/Bogota",
+      "US Eastern Standard Time": "America/Indianapolis",
+      "US Mountain Standard Time": "America/Phoenix",
+      "Alaskan Standard Time": "America/Anchorage",
+      "Hawaiian Standard Time": "Pacific/Honolulu",
+      "AUS Eastern Standard Time": "Australia/Sydney",
+      "AUS Central Standard Time": "Australia/Adelaide",
+      "West Pacific Standard Time": "Pacific/Port_Moresby",
+      "FLE Standard Time": "Europe/Kiev",
+      "GTB Standard Time": "Europe/Bucharest",
+      "Israel Standard Time": "Asia/Jerusalem",
+      "South Africa Standard Time": "Africa/Johannesburg",
+      "E. Africa Standard Time": "Africa/Nairobi",
+      "Atlantic Standard Time": "America/Halifax",
+      "Argentina Standard Time": "America/Argentina/Buenos_Aires",
+      "Venezuela Standard Time": "America/Caracas",
+      "Greenland Standard Time": "America/Godthab",
+      "Azores Standard Time": "Atlantic/Azores",
+      "Cape Verde Standard Time": "Atlantic/Cape_Verde",
+    };
+
+    // Check if it's already a valid IANA timezone (contains forward slash)
+    if (timezone.includes("/")) {
+      return timezone;
+    }
+
+    // Look up in our mapping table
+    const mapped = timezoneMap[timezone];
+    if (mapped) {
+      console.log(`🌍 Mapped timezone: "${timezone}" → "${mapped}"`);
+      return mapped;
+    }
+
+    // If not found, log a warning but use the original
+    console.log(`⚠️  Unknown timezone "${timezone}", using as-is`);
+    return timezone;
+  }
+
   async prepareEmails(icsFilePath) {
     try {
       console.log("🚀 PREPARE MODE: Building email and name mappings\n");
@@ -483,7 +543,7 @@ class CalendarImporter {
       if (recurrenceId) {
         event.originalStartTime = {
           dateTime: recurrenceId.toJSDate().toISOString(),
-          timeZone: recurrenceId.timezone || "UTC",
+          timeZone: this.normalizeTimeZone(recurrenceId.timezone),
         };
       }
       // Mark for special handling during import
@@ -493,14 +553,14 @@ class CalendarImporter {
     if (icsEvent.startDate) {
       event.start = {
         dateTime: icsEvent.startDate.toJSDate().toISOString(),
-        timeZone: icsEvent.startDate.timezone || "UTC",
+        timeZone: this.normalizeTimeZone(icsEvent.startDate.timezone),
       };
     }
 
     if (icsEvent.endDate) {
       event.end = {
         dateTime: icsEvent.endDate.toJSDate().toISOString(),
-        timeZone: icsEvent.endDate.timezone || "UTC",
+        timeZone: this.normalizeTimeZone(icsEvent.endDate.timezone),
       };
     }
 
