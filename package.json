@@ -1,0 +1,19 @@
+{
+  "name": "ics-google-calendar-importer",
+  "version": "1.0.0",
+  "description": "Import ICS files to Google Calendar preserving organizer/attendee info",
+  "main": "ics-import.js",
+  "dependencies": {
+    "googleapis": "^128.0.0",
+    "ical.js": "^1.5.0"
+  },
+  "devDependencies": {
+    "jest": "^29.0.0"
+  },
+  "scripts": {
+    "test": "jest"
+  },
+  "keywords": ["calendar", "ics", "google-calendar", "import"],
+  "author": "Doug Mayer <me@doxavore.com>",
+  "license": "MIT"
+}

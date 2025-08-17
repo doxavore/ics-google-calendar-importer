@@ -1,0 +1,62 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Test//Test Calendar//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+UID:simple-event@example.com
+DTSTAMP:20240301T120000Z
+DTSTART:20240315T140000Z
+DTEND:20240315T150000Z
+SUMMARY:Simple Meeting
+DESCRIPTION:A simple test meeting
+LOCATION:Conference Room A
+ORGANIZER;CN=John Doe:mailto:john.doe@example.com
+ATTENDEE;CN=Jane Smith;PARTSTAT=ACCEPTED:mailto:jane.smith@example.com
+ATTENDEE;CN=Bob Wilson;PARTSTAT=TENTATIVE:mailto:bob.wilson@example.com
+END:VEVENT
+BEGIN:VEVENT
+UID:recurring-event@example.com
+DTSTAMP:20240301T120000Z
+DTSTART:20240320T100000Z
+DTEND:20240320T110000Z
+SUMMARY:Weekly Team Meeting
+DESCRIPTION:Weekly standup meeting
+LOCATION:Room 101
+ORGANIZER;CN=Team Lead:mailto:team.lead@example.com
+ATTENDEE;CN=Developer One:mailto:dev1@example.com
+ATTENDEE;CN=Developer Two:mailto:dev2@example.com
+RRULE:FREQ=WEEKLY;BYDAY=WE;COUNT=10
+END:VEVENT
+BEGIN:VEVENT
+UID:recurring-event@example.com
+DTSTAMP:20240301T120000Z
+RECURRENCE-ID:20240327T100000Z
+DTSTART:20240327T140000Z
+DTEND:20240327T150000Z
+SUMMARY:Weekly Team Meeting (Moved)
+DESCRIPTION:Weekly standup meeting - moved to afternoon
+LOCATION:Room 201
+ORGANIZER;CN=Team Lead:mailto:team.lead@example.com
+ATTENDEE;CN=Developer One:mailto:dev1@example.com
+ATTENDEE;CN=Developer Two:mailto:dev2@example.com
+END:VEVENT
+BEGIN:VEVENT
+UID:invalid-email-event@example.com
+DTSTAMP:20240301T120000Z
+DTSTART:20240401T120000Z
+DTEND:20240401T130000Z
+SUMMARY:Event with Invalid Email
+ORGANIZER;CN=Bad Email:mailto:invalid_email_format
+ATTENDEE;CN=No Email Person:
+END:VEVENT
+BEGIN:VEVENT
+UID:recurring-instance_R20240320T100000@example.com
+DTSTAMP:20240301T120000Z
+DTSTART:20240320T100000Z
+DTEND:20240320T110000Z
+SUMMARY:Weekly Team Meeting Instance
+DESCRIPTION:This should be skipped as a recurring instance
+ORGANIZER;CN=Team Lead:mailto:team.lead@example.com
+END:VEVENT
+END:VCALENDAR
