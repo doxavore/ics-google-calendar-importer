@@ -4,7 +4,7 @@
   "description": "Import ICS files to Google Calendar preserving organizer/attendee info",
   "main": "ics-import.js",
   "dependencies": {
-    "googleapis": "^128.0.0",
+    "googleapis": "^156.0.0",
     "ical.js": "^1.5.0"
   },
   "devDependencies": {
