@@ -933,7 +933,9 @@ class CalendarImporter {
     try {
       if (fs.existsSync(sidecarPath)) {
         const position = parseInt(fs.readFileSync(sidecarPath, "utf8").trim());
-        console.log(`📌 Found checkpoint: Resuming from event ${position + 1}`);
+        console.log(
+          `📌 Found checkpoint: Resuming from position ${position + 1} (newest-first order)`,
+        );
         return position;
       }
     } catch (error) {
@@ -1007,6 +1009,10 @@ class CalendarImporter {
       } else {
         console.log("⚡ Duplicate checking is DISABLED (faster imports)");
       }
+
+      // Reverse events to process newest-to-oldest
+      events.reverse();
+      console.log("📅 Processing events from newest to oldest");
 
       const startPosition = this.loadCheckpoint(icsFilePath);
       console.log("");

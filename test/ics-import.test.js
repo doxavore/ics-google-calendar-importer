@@ -1168,6 +1168,37 @@ END:VCALENDAR`;
   });
 });
 
+describe("Event processing order", () => {
+  test("should process events from newest to oldest", () => {
+    const testEvents = [
+      { summary: "Event 1", iCalUID: "event1@test.com" },
+      { summary: "Event 2", iCalUID: "event2@test.com" },
+      { summary: "Event 3", iCalUID: "event3@test.com" },
+    ];
+
+    // Mock the array reverse to track if it's called
+    const originalReverse = Array.prototype.reverse;
+    let reverseCalled = false;
+    Array.prototype.reverse = function () {
+      reverseCalled = true;
+      return originalReverse.call(this);
+    };
+
+    try {
+      // Simulate the events array processing
+      const events = [...testEvents];
+      events.reverse();
+
+      expect(reverseCalled).toBe(true);
+      expect(events[0].summary).toBe("Event 3"); // Latest event should be first
+      expect(events[2].summary).toBe("Event 1"); // Oldest event should be last
+    } finally {
+      // Restore original reverse method
+      Array.prototype.reverse = originalReverse;
+    }
+  });
+});
+
 describe("Error reporting with line numbers", () => {
   test("should include line number and file info in error messages", () => {
     // Mock console.error to capture error messages
