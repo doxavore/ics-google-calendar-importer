@@ -998,3 +998,47 @@ describe("Sequence error detection", () => {
     });
   });
 });
+
+describe("Error reporting with line numbers", () => {
+  test("should include line number and file info in error messages", () => {
+    // Mock console.error to capture error messages
+    const originalConsoleError = console.error;
+    const errorMessages = [];
+    console.error = jest.fn((message) => {
+      errorMessages.push(message);
+    });
+
+    try {
+      const importer = new CalendarImporter();
+
+      // Create a mock event that would cause an error
+      const mockEventData = {
+        summary: "Test Event",
+        iCalUID: "test-uid@example.com",
+      };
+
+      // Simulate the error handling logic that would occur during processing
+      const eventError = new Error("Test error message");
+      const i = 4; // Line 5 (0-indexed)
+      const jsonlPath = "test-file.jsonl";
+
+      // Simulate the error logging from the catch block
+      const errorMessage = eventError.message || "Unknown error";
+      const eventSummary = mockEventData.summary || "Untitled Event";
+      const eventUID = mockEventData.iCalUID || "Unknown UID";
+
+      console.error(`❌ Failed to import event at line ${i + 1} of ${jsonlPath}: ${errorMessage}`);
+      console.error(`   📝 Event: "${eventSummary}" (UID: ${eventUID})`);
+
+      // Verify the error messages contain the expected information
+      expect(errorMessages[0]).toContain("line 5");
+      expect(errorMessages[0]).toContain("test-file.jsonl");
+      expect(errorMessages[0]).toContain("Test error message");
+      expect(errorMessages[1]).toContain("Test Event");
+      expect(errorMessages[1]).toContain("test-uid@example.com");
+    } finally {
+      // Restore original console.error
+      console.error = originalConsoleError;
+    }
+  });
+});

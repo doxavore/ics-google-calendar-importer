@@ -368,7 +368,7 @@ class CalendarImporter {
       );
       console.log(`\n💡 Now run: node script.js process ${icsFilePath}`);
     } catch (error) {
-      console.error("❌ Prepare failed:", error.message);
+      console.error(`❌ Prepare failed for ${icsFilePath}:`, error.message);
       process.exit(1);
     }
   }
@@ -941,7 +941,12 @@ class CalendarImporter {
           this.saveCheckpoint(icsFilePath, i);
         } catch (eventError) {
           const errorMessage = eventError.message || "Unknown error";
-          console.error(`❌ Failed to import: ${errorMessage}`);
+          const eventSummary = eventData.summary || "Untitled Event";
+          const eventUID = eventData.iCalUID || "Unknown UID";
+          console.error(
+            `❌ Failed to import event at line ${i + 1} of ${jsonlPath}: ${errorMessage}`,
+          );
+          console.error(`   📝 Event: "${eventSummary}" (UID: ${eventUID})`);
 
           // Check if this is a sequence-related error that already went through retry logic
           if (this.isSequenceError(eventError)) {
@@ -991,7 +996,7 @@ class CalendarImporter {
 
       this.removeCheckpoint(icsFilePath);
     } catch (error) {
-      console.error("❌ Process failed:", error.message);
+      console.error(`❌ Process failed for ${jsonlPath}:`, error.message);
       process.exit(1);
     }
   }
