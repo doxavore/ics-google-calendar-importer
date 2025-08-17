@@ -11,6 +11,7 @@ DTEND:20240315T150000Z
 SUMMARY:Simple Meeting
 DESCRIPTION:A simple test meeting
 LOCATION:Conference Room A
+COLOR:blue
 ORGANIZER;CN=John Doe:mailto:john.doe@example.com
 ATTENDEE;CN=Jane Smith;PARTSTAT=ACCEPTED:mailto:jane.smith@example.com
 ATTENDEE;CN=Bob Wilson;PARTSTAT=TENTATIVE:mailto:bob.wilson@example.com

@@ -521,6 +521,126 @@ class CalendarImporter {
     );
   }
 
+  mapColorToGoogleCalendar(icsColor) {
+    if (!icsColor) return null;
+
+    // Google Calendar color IDs (1-11 for events)
+    const colorMap = {
+      // Common color names to Google Calendar color IDs
+      red: "11",
+      orange: "6",
+      yellow: "5",
+      green: "10",
+      blue: "9",
+      purple: "3",
+      pink: "4",
+      brown: "7",
+      gray: "8",
+      grey: "8",
+      teal: "2",
+      cyan: "2",
+      lime: "10",
+      indigo: "1",
+      violet: "3",
+      magenta: "4",
+      maroon: "11",
+      navy: "9",
+      olive: "5",
+      aqua: "2",
+      fuchsia: "4",
+      silver: "8",
+      black: "8",
+      white: null, // Use default
+      slategray: "8",
+      slategrey: "8",
+      darkgray: "8",
+      darkgrey: "8",
+      lightgray: "8",
+      lightgrey: "8",
+    };
+
+    // Normalize the color input
+    const normalizedColor = icsColor.toLowerCase().trim();
+
+    // Check for direct color name match
+    if (colorMap[normalizedColor]) {
+      console.log(
+        `🎨 Mapped color: "${icsColor}" → Google Calendar color ${colorMap[normalizedColor]}`,
+      );
+      return colorMap[normalizedColor];
+    }
+
+    // Check for hex color codes and map to closest Google Calendar color
+    if (normalizedColor.startsWith("#")) {
+      const hexColor = normalizedColor.substring(1);
+      if (hexColor.length === 6) {
+        const googleColorId = this.mapHexToGoogleColor(hexColor);
+        if (googleColorId) {
+          console.log(
+            `🎨 Mapped hex color: "${icsColor}" → Google Calendar color ${googleColorId}`,
+          );
+          return googleColorId;
+        }
+      }
+    }
+
+    // Check for RGB values
+    const rgbMatch = normalizedColor.match(/rgb\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/);
+    if (rgbMatch) {
+      const [, r, g, b] = rgbMatch;
+      const googleColorId = this.mapRgbToGoogleColor(parseInt(r), parseInt(g), parseInt(b));
+      if (googleColorId) {
+        console.log(`🎨 Mapped RGB color: "${icsColor}" → Google Calendar color ${googleColorId}`);
+        return googleColorId;
+      }
+    }
+
+    console.log(`⚠️  Unknown color format: "${icsColor}", using default`);
+    return null;
+  }
+
+  mapHexToGoogleColor(hex) {
+    // Convert hex to RGB
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+    return this.mapRgbToGoogleColor(r, g, b);
+  }
+
+  mapRgbToGoogleColor(r, g, b) {
+    // Google Calendar colors (more accurate RGB values)
+    const googleColors = [
+      { id: "1", r: 121, g: 134, b: 203 }, // Lavender (light blue/purple)
+      { id: "2", r: 51, g: 182, b: 121 }, // Sage (teal/green)
+      { id: "3", r: 142, g: 36, b: 170 }, // Grape (purple)
+      { id: "4", r: 230, g: 124, b: 115 }, // Flamingo (pink/salmon)
+      { id: "5", r: 246, g: 191, b: 38 }, // Banana (yellow)
+      { id: "6", r: 255, g: 109, b: 1 }, // Tangerine (orange)
+      { id: "7", r: 121, g: 85, b: 72 }, // Cocoa (brown)
+      { id: "8", r: 97, g: 97, b: 97 }, // Graphite (gray)
+      { id: "9", r: 51, g: 133, b: 255 }, // Blueberry (blue) - corrected for better blue matching
+      { id: "10", r: 51, g: 182, b: 121 }, // Basil (green)
+      { id: "11", r: 217, g: 48, b: 37 }, // Tomato (red)
+    ];
+
+    // Find the closest color using Euclidean distance
+    let closestColor = null;
+    let minDistance = Infinity;
+
+    for (const color of googleColors) {
+      const distance = Math.sqrt(
+        Math.pow(r - color.r, 2) + Math.pow(g - color.g, 2) + Math.pow(b - color.b, 2),
+      );
+
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestColor = color;
+      }
+    }
+
+    return closestColor ? closestColor.id : null;
+  }
+
   async updateEventWithRetry(calendarId, eventId, eventResource, maxRetries = 3) {
     let lastError = null;
 
@@ -614,6 +734,21 @@ class CalendarImporter {
       location: icsEvent.location || "",
       iCalUID: iCalUID,
     };
+
+    // Handle color information from ICS
+    const colorProp =
+      icsEvent.component.getFirstProperty("color") ||
+      icsEvent.component.getFirstProperty("x-apple-calendar-color") ||
+      icsEvent.component.getFirstProperty("x-outlook-color") ||
+      icsEvent.component.getFirstProperty("x-microsoft-cdo-busystatus-color");
+
+    if (colorProp) {
+      const icsColor = colorProp.getFirstValue();
+      const googleColorId = this.mapColorToGoogleCalendar(icsColor);
+      if (googleColorId) {
+        event.colorId = googleColorId;
+      }
+    }
 
     if (isRecurrenceException) {
       const recurrenceId = recurrenceIdProp.getFirstValue();

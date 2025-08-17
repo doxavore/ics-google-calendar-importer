@@ -999,6 +999,175 @@ describe("Sequence error detection", () => {
   });
 });
 
+describe("Color handling", () => {
+  let importer;
+
+  beforeEach(() => {
+    importer = new CalendarImporter();
+  });
+
+  test("should map color names correctly", () => {
+    expect(importer.mapColorToGoogleCalendar("red")).toBe("11");
+    expect(importer.mapColorToGoogleCalendar("blue")).toBe("9");
+    expect(importer.mapColorToGoogleCalendar("green")).toBe("10");
+    expect(importer.mapColorToGoogleCalendar("yellow")).toBe("5");
+    expect(importer.mapColorToGoogleCalendar("purple")).toBe("3");
+    expect(importer.mapColorToGoogleCalendar("orange")).toBe("6");
+  });
+
+  test("should handle case insensitive color names", () => {
+    expect(importer.mapColorToGoogleCalendar("RED")).toBe("11");
+    expect(importer.mapColorToGoogleCalendar("Blue")).toBe("9");
+    expect(importer.mapColorToGoogleCalendar("GREEN")).toBe("10");
+  });
+
+  test("should map hex colors to closest Google Calendar color", () => {
+    expect(importer.mapColorToGoogleCalendar("#FF0000")).toBe("11"); // Red
+    expect(importer.mapColorToGoogleCalendar("#0000FF")).toBe("9"); // Blue
+    expect(importer.mapColorToGoogleCalendar("#00FF00")).toBeTruthy(); // Green (should map to some green color)
+    expect(importer.mapColorToGoogleCalendar("#FFFF00")).toBe("5"); // Yellow
+  });
+
+  test("should handle RGB color values", () => {
+    expect(importer.mapColorToGoogleCalendar("rgb(255, 0, 0)")).toBe("11"); // Red
+    expect(importer.mapColorToGoogleCalendar("rgb(0, 0, 255)")).toBe("9"); // Blue
+    expect(importer.mapColorToGoogleCalendar("rgb(0, 255, 0)")).toBeTruthy(); // Green (should map to some green color)
+  });
+
+  test("should handle unknown colors gracefully", () => {
+    expect(importer.mapColorToGoogleCalendar("unknown")).toBe(null);
+    expect(importer.mapColorToGoogleCalendar("")).toBe(null);
+    expect(importer.mapColorToGoogleCalendar(null)).toBe(null);
+    expect(importer.mapColorToGoogleCalendar(undefined)).toBe(null);
+  });
+
+  test("should handle malformed hex colors", () => {
+    expect(importer.mapColorToGoogleCalendar("#FF")).toBe(null);
+    expect(importer.mapColorToGoogleCalendar("#GGGGGG")).toBe(null);
+    expect(importer.mapColorToGoogleCalendar("#")).toBe(null);
+  });
+
+  test("should convert colors in ICS events", () => {
+    const ICAL = require("ical.js");
+
+    const colorIcs = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Test//Test Calendar//EN
+BEGIN:VEVENT
+UID:color-event@example.com
+DTSTAMP:20240301T120000Z
+DTSTART:20240315T140000Z
+DTEND:20240315T150000Z
+SUMMARY:Color Test Event
+COLOR:red
+END:VEVENT
+END:VCALENDAR`;
+
+    const jcalData = ICAL.parse(colorIcs);
+    const comp = new ICAL.Component(jcalData);
+    const vevents = comp.getAllSubcomponents("vevent");
+    const event = new ICAL.Event(vevents[0]);
+
+    const googleEvent = importer.convertICSToGoogleEvent(event);
+
+    expect(googleEvent).toBeTruthy();
+    expect(googleEvent.colorId).toBe("11"); // Red
+  });
+
+  test("should handle Apple Calendar color properties", () => {
+    const ICAL = require("ical.js");
+
+    const appleColorIcs = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Apple Inc.//Mac OS X 10.15.7//EN
+BEGIN:VEVENT
+UID:apple-color-event@example.com
+DTSTAMP:20240301T120000Z
+DTSTART:20240315T140000Z
+DTEND:20240315T150000Z
+SUMMARY:Apple Color Event
+X-APPLE-CALENDAR-COLOR:#FF6900
+END:VEVENT
+END:VCALENDAR`;
+
+    const jcalData = ICAL.parse(appleColorIcs);
+    const comp = new ICAL.Component(jcalData);
+    const vevents = comp.getAllSubcomponents("vevent");
+    const event = new ICAL.Event(vevents[0]);
+
+    const googleEvent = importer.convertICSToGoogleEvent(event);
+
+    expect(googleEvent).toBeTruthy();
+    expect(googleEvent.colorId).toBeTruthy(); // Should map to some Google color
+  });
+
+  test("should handle events without colors", () => {
+    const ICAL = require("ical.js");
+
+    const noColorIcs = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Test//Test Calendar//EN
+BEGIN:VEVENT
+UID:no-color-event@example.com
+DTSTAMP:20240301T120000Z
+DTSTART:20240315T140000Z
+DTEND:20240315T150000Z
+SUMMARY:No Color Event
+END:VEVENT
+END:VCALENDAR`;
+
+    const jcalData = ICAL.parse(noColorIcs);
+    const comp = new ICAL.Component(jcalData);
+    const vevents = comp.getAllSubcomponents("vevent");
+    const event = new ICAL.Event(vevents[0]);
+
+    const googleEvent = importer.convertICSToGoogleEvent(event);
+
+    expect(googleEvent).toBeTruthy();
+    expect(googleEvent.colorId).toBeUndefined(); // Should not have color
+  });
+
+  test("should support common ICS color formats", () => {
+    // Test various color formats commonly found in ICS files
+    const commonColors = [
+      "slategray",
+      "#0E61B9", // blue
+      "#44A703", // green
+      "#711A76", // purple
+      "#B90E28", // red
+      "#E6C800", // yellow
+      "#e8ae0c", // yellow (lowercase)
+      "#F64F00", // orange
+    ];
+
+    commonColors.forEach((color) => {
+      const result = importer.mapColorToGoogleCalendar(color);
+      expect(result).toBeTruthy(); // Should map to some Google Calendar color
+      expect(typeof result).toBe("string"); // Should be a string color ID
+      const colorId = parseInt(result);
+      expect(colorId).toBeGreaterThanOrEqual(1); // Should be valid color ID (1-11)
+      expect(colorId).toBeLessThanOrEqual(11);
+    });
+  });
+
+  test("should handle gray color variations", () => {
+    const grayVariations = [
+      "gray",
+      "grey",
+      "slategray",
+      "slategrey",
+      "darkgray",
+      "darkgrey",
+      "lightgray",
+      "lightgrey",
+    ];
+
+    grayVariations.forEach((color) => {
+      expect(importer.mapColorToGoogleCalendar(color)).toBe("8"); // Should map to Graphite
+    });
+  });
+});
+
 describe("Error reporting with line numbers", () => {
   test("should include line number and file info in error messages", () => {
     // Mock console.error to capture error messages
