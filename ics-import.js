@@ -691,6 +691,25 @@ class CalendarImporter {
     }
   }
 
+  async authenticateOnly() {
+    try {
+      console.log("🔐 AUTH MODE: Generating authorization tokens\n");
+
+      this.loadCredentials();
+
+      const hasTokens = await this.loadSavedTokens();
+      if (!hasTokens) {
+        await this.authorize();
+        console.log("✅ Authorization tokens saved to data/tokens.json");
+      } else {
+        console.log("✅ Valid authorization tokens already exist in data/tokens.json");
+      }
+    } catch (error) {
+      console.error("❌ Authentication failed:", error.message);
+      process.exit(1);
+    }
+  }
+
   async processJSONLFile(jsonlPath, icsFilePath, calendarId = "primary") {
     try {
       console.log("🚀 PROCESS MODE: Importing to Google Calendar\n");
@@ -847,16 +866,21 @@ function parseArgs() {
     skipErrors: false,
   };
 
-  if (args.length < 2) {
+  if (args.length < 1) {
     return parsed;
   }
 
-  // First two arguments are always command and file
+  // First argument is always the command
   parsed.command = args[0];
-  parsed.inputFile = args[1];
+
+  // Second argument is the file (if provided)
+  if (args.length > 1 && !args[1].startsWith("--")) {
+    parsed.inputFile = args[1];
+  }
 
   // Parse remaining arguments as options
-  for (let i = 2; i < args.length; i++) {
+  const startIndex = parsed.inputFile ? 2 : 1;
+  for (let i = startIndex; i < args.length; i++) {
     const arg = args[i];
 
     if (arg === "--calendar-id") {
@@ -885,10 +909,12 @@ function parseArgs() {
 
 function showHelp() {
   console.log(`Usage:
+  node ics-import.js auth
   node ics-import.js prepare <file.ics> [options]
   node ics-import.js process <file.jsonl> [options]
 
 Commands:
+  auth       Generate Google Calendar API authorization tokens
   prepare    Scan ICS file and build email/name mappings
   process    Import events to Google Calendar from JSONL file
 
@@ -899,6 +925,7 @@ Options:
   --help, -h             Show this help message
 
 Examples:
+  node ics-import.js auth
   node ics-import.js prepare data/calendar.ics
   node ics-import.js process data/calendar.ics.jsonl
   node ics-import.js process data/calendar.ics.jsonl --calendar-id work@group.calendar.google.com
@@ -908,7 +935,19 @@ Examples:
 async function main() {
   const args = parseArgs();
 
-  if (!args.command || !args.inputFile) {
+  if (!args.command) {
+    showHelp();
+    process.exit(1);
+  }
+
+  // Special handling for auth command which doesn't require a file
+  if (args.command === "auth") {
+    const importer = new CalendarImporter();
+    await importer.authenticateOnly();
+    return;
+  }
+
+  if (!args.inputFile) {
     showHelp();
     process.exit(1);
   }
@@ -951,7 +990,7 @@ async function main() {
       break;
     default:
       console.error(`❌ Unknown command: ${args.command}`);
-      console.log("Valid commands: prepare, process");
+      console.log("Valid commands: auth, prepare, process");
       process.exit(1);
   }
 }
