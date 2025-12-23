@@ -5,7 +5,7 @@
   "main": "ics-import.js",
   "dependencies": {
     "googleapis": "^128.0.0",
-    "ical.js": "^1.5.0"
+    "ical.js": "^2.2.1"
   },
   "devDependencies": {
     "jest": "^29.0.0"
